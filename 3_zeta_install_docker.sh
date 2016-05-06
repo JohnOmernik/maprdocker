@@ -41,7 +41,7 @@ sudo yum install -y nano
 sudo mkdir -p /etc/systemd/system/docker.service.d && sudo tee /etc/systemd/system/docker.service.d/override.conf <<- EOI8
 [Service]
 ExecStart=
-ExecStart=/usr/bin/docker daemon --insecure-registry=${DOCKER_REG_URL}--storage-driver=overlay -H fd://
+ExecStart=/usr/bin/docker daemon --insecure-registry=${DOCKER_REG_URL} --storage-driver=overlay -H fd://
 EOI8
 
 # update yum
