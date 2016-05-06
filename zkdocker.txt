@@ -1,0 +1,3 @@
+1. install nano (optional)
+2. add mapuser
+3. ./zkServer.sh start-foreground
