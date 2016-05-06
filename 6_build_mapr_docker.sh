@@ -1,11 +1,25 @@
 #!/bin/bash
 
-. ./mapr.conf
+. ./cluster.conf
+
+
+CREDFILE="/home/zetaadm/creds/creds.txt"
+
+
+if [ ! -f "$CREDFILE" ]; then
+    echo "Can't find cred file"
+    exit 1
+fi
+
+MAPR_CRED=$(cat $CREDFILE|grep "mapr\:")
+ZETA_CRED=$(cat $CREDFILE|grep "zetaadm\:")
+
+
+rm -rf ./maprdocker
 
 mkdir ./maprdocker
 
-
-sudo docker rmi -f zeta/maprdocker
+sudo docker rmi -f ${DOCKER_REG_URL}/maprdocker
 
 sudo docker pull ubuntu:latest
 
@@ -28,6 +42,16 @@ sed -i 's/AddUdevRules(list/#AddUdevRules(list/' /opt/mapr/server/disksetup
 
 EOL3
 
+cat > ./maprdocker/dockerreconf.sh << EOL7
+#!/bin/bash
+
+/opt/mapr/server/configure.sh -C \${CLDBS} -Z \${ZKS} -N \${CLUSTERNAME} -no-autostart \${MAPR_CONF_OPTS}
+
+/opt/mapr/server/dockerrun.sh
+
+EOL7
+
+
 cat > ./maprdocker/dockerrun.sh << EOL4
 #!/bin/bash
 service mapr-warden start
@@ -46,8 +70,10 @@ FROM ubuntu:latest
 RUN adduser --disabled-login --gecos '' --uid=2500 zetaadm
 RUN adduser --disabled-login --gecos '' --uid=2000 mapr
 
-RUN usermod -a -G disk mapr
+RUN echo "$MAPR_CRED"|chpasswd
+RUN echo "$ZETA_CRED"|chpasswd
 
+RUN usermod -a -G root mapr && usermod -a -G root zetaadm && usermod -a -G adm mapr && usermod -a -G adm zetaadm && usermod -a -G disk mapr && usermod -a -G disk zetaadm
 
 RUN echo "deb http://package.mapr.com/releases/v5.1.0/ubuntu/ mapr optional" > /etc/apt/sources.list.d/mapr.list
 RUN echo "deb http://package.mapr.com/releases/ecosystem-5.x/ubuntu binary/" >> /etc/apt/sources.list.d/mapr.list
@@ -56,44 +82,21 @@ RUN apt-get update && apt-get install -y openjdk-8-jre wget perl netcat nfs-comm
 
 RUN apt-get install -y --allow-unauthenticated mapr-core mapr-core-internal mapr-fileserver mapr-hadoop-core mapr-hbase mapr-mapreduce1 mapr-mapreduce2 mapr-cldb mapr-webserver
 
-ADD dockerconf.sh /opt/mapr/server/
 ADD dockerrun.sh /opt/mapr/server/
+ADD dockerconf.sh /opt/mapr/server/
+ADD dockerreconf.sh /opt/mapr/server/
 
-RUN chmod +x /opt/mapr/server/dockerrun.sh && chmod +x /opt/mapr/server/dockerconf.sh
+RUN chmod +x /opt/mapr/server/dockerrun.sh && chmod +x /opt/mapr/server/dockerconf.sh && chmod +x /opt/mapr/server/dockerreconf.sh
 
 CMD ["/bin/bash"]
 
 EOL
+
+
 cd maprdocker
 
-sudo docker build -t zeta/maprdocker .
+sudo docker build -t ${DOCKER_REG_URL}/maprdocker .
+sudo docker push ${DOCKER_REG_URL}/maprdocker
 
-
-
-
-sudo mkdir -p /opt/mapr/conf
-sudo chown mapr:mapr /opt/mapr/conf
-sudo chmod 755 /opt/mapr/conf
-
-sudo mkdir -p /opt/mapr/logs
-sudo chown mapr:mapr /opt/mapr/logs
-sudo chmod 777 /opt/mapr/logs
-
-sudo mkdir -p /opt/mapr/roles
-sudo chown root:root /opt/mapr/roles
-
-
-CHK=$(ls /opt/mapr/conf/|wc -l)
-if [ "$CHK" == "0" ];then
-    CID=$(sudo docker run -d zeta/maprdocker sleep 10)
-    sudo docker cp ${CID}:/opt/mapr/conf /opt/mapr/
-    sudo docker cp ${CID}:/opt/mapr/roles /opt/mapr/
-fi
-
-
-NSUB="export MAPR_SUBNETS=$SUBNETS"
-
-
-sudo sed -i -r "s@#export MAPR_SUBNETS=.*@${NSUB}@g" /opt/mapr/conf/env.sh
-
-
+cd ..
+rm -rf ./maprdocker

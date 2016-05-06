@@ -27,7 +27,7 @@ SSHCMD="ssh -i ${PRVKEY} -t ${SSHHOST}"
 # Have to find a way to discover this
 
 rm -rf nodes.list
-for I in $INODES; do 
+for I in $INODES; do
     echo "$I" >> nodes.list
 done
 
@@ -43,7 +43,7 @@ fi
 #####################
 # Copy private key
 echo "Copying private key"
-$SCPCMD ${PRVKEY} ${SSHHOST}:/home/${IUSER}/.ssh/id_rsa
+$SCPCMD -o StrictHostKeyChecking=no ${PRVKEY} ${SSHHOST}:/home/${IUSER}/.ssh/id_rsa
 # Copy next step scripts and helpers
 echo "Copying Scripts"
 $SCPCMD runcmd.sh ${SSHHOST}:/home/${IUSER}/

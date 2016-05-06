@@ -1,14 +1,28 @@
 #!/bin/bash
 
-. ./mapr.conf
+. ./cluster.conf
 
-sudo docker rmi -f zeta/zkdocker
+CREDFILE="/home/zetaadm/creds/creds.txt"
+
+
+if [ ! -f "$CREDFILE" ]; then
+    echo "Can't find cred file"
+    exit 1
+fi
+
+MAPR_CRED=$(cat $CREDFILE|grep "mapr\:")
+ZETA_CRED=$(cat $CREDFILE|grep "zetaadm\:")
+
+
+
+sudo docker rmi -f ${DOCKER_REG_URL}/zkdocker
+
+rm -rf ./zkdocker
 
 mkdir ./zkdocker
 
 sudo docker pull ubuntu:latest
 
-echo "To do: Set ZK Servers Later"
 
 ZKOUT=$(echo -n $ZOOCFG|tr " " "\n")
 
@@ -55,6 +69,10 @@ FROM ubuntu:latest
 
 RUN adduser --disabled-login --gecos '' --uid=2500 zetaadm
 RUN adduser --disabled-login --gecos '' --uid=2000 mapr
+RUN echo "$MAPR_CRED"|chpasswd
+RUN echo "$ZETA_CRED"|chpasswd
+
+RUN usermod -a -G root mapr && usermod -a -G root zetaadm && usermod -a -G adm mapr && usermod -a -G adm zetaadm && usermod -a -G disk mapr && usermod -a -G disk zetaadm
 
 RUN apt-get update && apt-get install -y openjdk-8-jre wget perl netcat
 
@@ -71,36 +89,16 @@ RUN chown -R mapr:mapr /opt/mapr/zookeeper && chown mapr:root /opt/mapr/runzkdoc
 CMD ["/bin/bash"]
 
 EOL
+
 cd zkdocker
 
-sudo docker build -t zeta/zkdocker .
+sudo docker build -t ${DOCKER_REG_URL}/zkdocker .
 
+cd ..
 
-sudo mkdir -p /opt/mapr/conf
-sudo chown mapr:mapr /opt/mapr/conf
-sudo chmod 755 /opt/mapr/conf
+sudo docker push ${DOCKER_REG_URL}/zkdocker
 
-sudo mkdir -p /opt/mapr/zkdata
-sudo chown zetaadm:zetaadm /opt/mapr/zkdata
+rm -rf ./zkdocker
 
-ME=$(hostname)
-for ZK in $ZKLIST; do
-    ID=$(echo -n $ZK|cut -d":" -f1)
-    HNAME=$(echo -n $ZK|cut -d":" -f2)
-    CPORT=$(echo -n $ZK|cut -d":" -f3)
-    QPORT=$(echo -n $ZK|cut -d":" -f4)
-    MPORT=$(echo -n $ZK|cut -d":" -f5)
-    if [ "$ME" == "${HNAME}" ]; then
-        echo ${ID} > /opt/mapr/zkdata/myid
-    fi
-done
-
-sudo chown -R mapr:mapr /opt/mapr/zkdata
-sudo chmod 750 /opt/mapr/zkdata
-
-
-sudo mkdir -p /opt/mapr/zookeeper/logs
-sudo chown mapr:mapr /opt/mapr/zookeeper/logs
-sudo chmod 777 /opt/mapr/zookeeper/logs
-
+echo "Image pushed and ready to rumble"
 

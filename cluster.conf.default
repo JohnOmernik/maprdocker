@@ -1,48 +1,111 @@
 #!/bin/bash
 
 #########################
-# These are the editable settings for installing a MapR Zeta cluster.  Edit these settings prior to executing the scripts
-# These settings are all sourced in other files. There shouldn't be executable code here
-
+# These are the editable settings for installing a MapR running on Docker cluster.  Edit these settings prior to executing the scripts
 
 #########################
-# Need one external host to connect to upload scripts etc.
-# This should be the IP address of the node to do the install from. In AWS, just pick a node and send it along
-IHOST="127.0.0.1"
+# Needs one external host to connect to upload scripts etc.
+# This should be the IP address of the node to do the install from. In AWS, just pick a node, and put the public IP address here. 
+IHOST=""
 
 #########################
-# IUSER is the initial user to work with. in EC2, this is the AMI user. With the PRVKEY settings, this user should be able to SSH to all hosts in the cluster
-IUSER="ec2-user"
+# Need a list of nodes we'll be working on. In the future, we will get this auto matically, but for now you have to put a space separated list of the IP address of all nodes in your cluster. 
+INODES="10.22.87.235 10.22.87.236 10.22.87.237"
 
 #########################
-# PRVKEY is the the key for ssh to all nodes
+# IUSER is the initial user to work with. in EC2, this is the AMI user. With the PRVKEY settings, this user should be able to SSH to all hosts in the cluster.
+# This could be centos, ubuntu, ec2-user etc. 
+IUSER="centos"
+
+#########################
+# PRVKEY is the the key for ssh to all nodes. 
 # This is copied to the install host as /home/$IUSER/.ssh/id_rsa
-PRVKEY="./yourkey.pem"
+# This is the private key that matches the public key you specified in the AWS install. 
+PRVKEY="./id_rsa"
 
 #########################
-# This is the domain that mesos-dns will handle. Defaults to mesos.
-MESOS_DOMAIN="mesos"
+# Comma separated list of the hostnames for CLDBs. 
+# You can include ports (if no port is provided, 7222, the default is used)
+# You need at least one. Obviously more is good. If you are not going to run a licensed version of MapR, then 1 is fine.  If you are using M5/M7 put more in a for HA goodness
+# Ex:
+# CLDBS="host1:7222,host2:7222:host3:7222"
+# CLDBS="host1,host2,host3""
+# CLDBS="ip-10-22-87-235:7222"
+CLDBS="ip-10-22-87-235"
 
 #########################
-# This is the version of Mesos to download from Apache, build and install
-MESOS_VER="0.28.0"
-MESOS_DEB_ROOT="http://repos.mesosphere.com/ubuntu/pool/main/m/mesos/"
-MESOS_DEB_pre="mesos_0.28.0-2.0.16.ubuntu"
-MESOS_DEB_post="_amd64.deb"
+# This is the docker registry that will be used to house the images so you don't have to build them on every node
+# After your cluster is started in AWS, pick a node and use the default port
 
-MESOS_RPM_ROOT="http://repos.mesosphere.com/el/7/x86_64/RPMS/"
-MESOS_RPM="mesos-0.28.0-2.0.16.centos701406.x86_64.rpm"
+DOCKER_REG_HOST="ip-10-22-87-235"
+DOCKER_REG_PORT="5000"
+DOCKER_REG_URL="${DOCKER_REG_HOST}:${DOCKER_REG_PORT}"
+
+#########################
+# This is the list of Zookeepers. A few notes, we specify both the zkid and the ports used for leader/quorum elections so they don't conflict with other instances of Zookeeper
+# The format here is this: each ZK will be space separated and then for each ZK
+# id:hostname:client_port:master_election_port:quorumport
+#
+# Ideally in the future we will be looking to use exhibitor to create these and just specifying the hosts and client port. For now this is the easiest way to create this. 
+# Start your id with 0, MapR really wants you to use 5181 for the client port, and the 2880 and 3880 ports were selected by me to be different from the default of 2888:3888
+
+ZKLIST="0:ip-10-22-87-235:5181:2880:3880 1:ip-10-22-87-236:5181:2880:3880 2:ip-10-22-87-237:5181:2880:3880" 
+
+#########################
+# User for MapR services.  We recommend keeping this as mapr
+# Another user, zetaadm is also created, you will be promped for credentials for these users. 
+# At this time we don't allow you to specify the UID for the mapr and zetaadm user. As of now they are 2000 for mapr and 2500 for zetaadm. This may come in the future
+MUSER="mapr"
+
+#########################
+# SUBNETS is the value that is replaced in the /opt/mapr/conf/env.sh for MAPR_SUBNETS.  This is important because MapR will try to use the docker interfaces unless you limit this down.  
+# You can do commma separated subnets if you have more than one NIC you want to use
+#SUBNETS="10.0.2.0/24,10.0.3.0/24"
+SUBNETS="10.22.87.0/24"
+
+#########################
+# This is the initial disk list provided to MapR on startup.  Right now it's static and assumes the same disks on every node
+# In the future, I'd like to make this like the DC/OS ip-detect script where the script looks to gather the disks custom to each node
+# This is a comma separated list
+DISKS="/dev/xvdb,/dev/xvdc,/dev/xvdd"
+
+#########################
+# This is the cluster name that will be used for MapR
+CLUSTERNAME="mycluster"
+
+#########################
+# If you want to pass any other options to the configure script on initial install, add them here. 
+MAPR_CONF_OPTS=""
+
 
 
 #########################
-# I don't like putting passwords in file like this.
-# This will be evolving as we learn more about Mesos ACLs etc.
-# Remember to change these.
-MESOS_AGENT_USER="zetaagents"
-MESOS_AGENT_PASS="thepasswordforzetaagents"
-MESOS_PROD_PRNCPL="zetaprodcontrol"
-MESOS_PROD_PASS="anawesomeprodcontrolpassword"
-MESOS_DEV_PRNCPL="zetadevcontrol"
-MESOS_DEV_PASS="anawesomedevcontrolpassword"
+#########################
+# END OF USER CONFIGURABLE VARIABLES
+#########################
+#########################
 
+
+########################################################################################################################################################################################################
+
+# Do not change the rest of this script, this creates two more variables from your ZKs, one to put into the zoo.cfg on each ZK (ZOOCFG) and the other to pass to the mapr configure script ($ZKS)
+
+ZKS=""
+ZOOCFG=""
+for ZK in $ZKLIST; do
+    ID=$(echo -n $ZK|cut -d":" -f1)
+    HNAME=$(echo -n $ZK|cut -d":" -f2)
+    CPORT=$(echo -n $ZK|cut -d":" -f3)
+    QPORT=$(echo -n $ZK|cut -d":" -f4)
+    MPORT=$(echo -n $ZK|cut -d":" -f5)
+
+    if [ "$ZKS" != "" ]; then
+        ZKS="${ZKS},"
+    fi
+    if [ "$ZOOCFG" != "" ];then
+        ZOOCFG="${ZOOCFG} "
+    fi
+    ZKS="${ZKS}${HNAME}:${CPORT}"
+    ZOOCFG="${ZOOCFG}server.${ID}=${HNAME}:${QPORT}:${MPORT}"
+done
 

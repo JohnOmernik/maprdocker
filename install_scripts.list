@@ -1,1 +1,7 @@
 3_zeta_install_docker.sh 
+4_install_docker_reg.sh
+5_build_zk_docker.sh
+6_build_mapr_docker.sh
+7_run_zk_docker.sh
+8_run_mapr_docker.sh
+9_install_loopback.sh

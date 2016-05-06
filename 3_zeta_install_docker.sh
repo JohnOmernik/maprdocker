@@ -1,5 +1,5 @@
 #!/bin/bash
-
+. ./cluster.conf
 
 INST_FILE="/home/zetaadm/install_docker.sh"
 
@@ -20,7 +20,7 @@ else
     echo "Unknown lsb_release -a version at this time only ubuntu, centos, and redhat is supported"
     echo \$DIST_CHK
     exit 1
-
+fi
 if [ "\$INST_TYPE" == "ubuntu" ]; then
 # update apt-get
 sudo apt-get -y update
@@ -41,7 +41,7 @@ sudo yum install -y nano
 sudo mkdir -p /etc/systemd/system/docker.service.d && sudo tee /etc/systemd/system/docker.service.d/override.conf <<- EOI8
 [Service]
 ExecStart=
-ExecStart=/usr/bin/docker daemon --storage-driver=overlay -H fd://
+ExecStart=/usr/bin/docker daemon --insecure-registry=${DOCKER_REG_URL}--storage-driver=overlay -H fd://
 EOI8
 
 # update yum
@@ -76,10 +76,13 @@ EOL
 
 chmod +x $INST_FILE
 
-HOSTS="./nodes.list"
-while read HOST; do
+
+HOSTFILE="./nodes.list"
+HOSTS=`cat $HOSTFILE`
+for HOST in $HOSTS; do
   scp -o StrictHostKeyChecking=no $INST_FILE $HOST:$INST_FILE
-done < $HOSTS
+done
+
 
 
 /home/zetaadm/run_cmd_no_return.sh "$INST_FILE"

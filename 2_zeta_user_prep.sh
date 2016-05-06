@@ -9,6 +9,8 @@
 # 5. Create ssh keypair for zetaadm - private in home volume, ensure public is in authorized_keys on all nodes
 # 6. Copy remaining install scripts to /home/zetaadm 
 
+. ./cluster.conf
+
 SUDO_TEST=$(sudo whoami)
 if [ "$SUDO_TEST" != "root" ]; then
     echo "This script must be run with a user with sudo privs"
@@ -137,22 +139,30 @@ done < $HOSTS
 ./runcmd.sh "sudo rm $SCRIPT"
 
 ####################
+# Saving creds for later 
+sudo mkdir -p /home/zetaadm/creds
 
-####################
+cat > /home/${IUSER}/creds.txt << EOC
+zetaadm:${zetaadm_PASS1}
+mapr:${mapr_PASS1}
+EOC
+sudo mv /home/${IUSER}/creds.txt /home/zetaadm/creds/
+sudo chown -R zetaadm:zetaadm /home/zetaadm/creds
+sudo chmod 700 /home/zetaadm/creds
+
+
+
 echo "Creating Keys"
 sudo mkdir -p /home/zetaadm/.ssh
 sudo chown zetaadm:zetaadm /home/zetaadm/.ssh
 
 ssh-keygen -f ~/id_rsa -N ""
 
-
 PUB=$(sudo cat ~/id_rsa.pub)
 sudo mv id_rsa /home/zetaadm/.ssh/
 sudo chown zetaadm:zetaadm /home/zetaadm/.ssh/id_rsa
 
-
 ./runcmd.sh "sudo mkdir -p /home/zetaadm/.ssh && echo \"$PUB\" > idpub && sudo mv idpub /home/zetaadm/.ssh/authorized_keys && sudo chown -R zetaadm:zetaadm /home/zetaadm/.ssh && sudo chmod 700 /home/zetaadm/.ssh && sudo chmod 600 /home/zetaadm/.ssh/authorized_keys"
-
 
 
 echo "Moving Scripts to /home/zetaadm"
